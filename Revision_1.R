@@ -51,6 +51,7 @@ mlgs_by_date <- ddply(counts, .(date), function(x){
 mlgs_by_date <- melt(mlgs_by_date, id.vars = c("date", "mlg", "mlg2"))
 mlgs_by_date$type <- factor(mlgs_by_date$type, levels = c("Random", "Infected"))
 names(mlgs_by_date)[4:5] <- c("type", "count")
+mlgs_by_date[mlgs_by_date == 0] <- NA
 
 #Second, create the graph 
 pop.graph <- ggplot(mlgs_by_date, 
@@ -67,8 +68,6 @@ pop.graph <- ggplot(mlgs_by_date,
   theme(aspect.ratio = 1) +
   coord_flip()
 
-pop.graph
-
-ggsave("test.pdf", pop.graph, height = 10, width = 4, units = "in", dpi = 600)
+ggsave("Rand_vs_Inf.pdf", pop.graph, height = 10, width = 4, units = "in", dpi = 600)
 
        
