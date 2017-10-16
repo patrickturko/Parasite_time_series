@@ -1,5 +1,5 @@
 
-
+setwd("/media/FILES/Dropbox/Turko PhD Data/Turko et al Chapter 5 Greifensee/Time Series")
 # Load packages and functions ---------------------------------------------
 
 
@@ -786,7 +786,7 @@ msat_m6.1 <- heat(y_msat_m, x_d.b, sample = c(40, 60), lags = 5,
 msat_m7.1 <- heat(y_msat_m, x_d.d, sample = c(40, 60), lags = 5, 
                 s_window = c(45, 55), l_window = c(-30, 30), give_series = T)
 
-msat_m8,1 <- heat(y_msat_m, x_d.n, sample = c(40, 60), lags = 5, 
+msat_m8.1 <- heat(y_msat_m, x_d.n, sample = c(40, 60), lags = 5, 
                 s_window = c(45, 55), l_window = c(-30, 30), give_series = T)
 
 msat_m9.1 <- heat(y_msat_m, x_d.r, sample = c(40, 60), lags = 5, 
@@ -884,7 +884,7 @@ ggmsat_m11.1 <- ggplot(to_plot, aes(x = series2, y = series1)) +
   # scale_x_continuous(breaks = seq(0, 0.15, 0.05))+
   labs(title = "Temperature", 
        y = expression(paste(italic(Daphnia), " microsat. Turnover")), 
-       x = "Intgrated temperature (°C)")
+       x = "Intgrated temperature (?C)")
 ggmsat_m11.1
   
 ggsave("Results/Msat MLG Turn Correlations/Cyanos.pdf", ggmsat_m1.1, 
