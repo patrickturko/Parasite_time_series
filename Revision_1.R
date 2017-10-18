@@ -132,7 +132,7 @@ write.table(pop.fish, "whole_population.csv", row.names = F)
 # Stats 2: Fisher test on common clones -----------------------------------
 # Take only those over 5%, and reshape to suit test
 common <- ddply(counts, .(date, mlg), function(x){
-  if(sum(x$count) > 1) 
+  if(sum(x$percent) >= 0.05) 
     x
 })
 
@@ -153,6 +153,34 @@ common.fish$p_value <- common.fish$p_value * nrow(common.fish)
 
 #write to file
 write.table(common.fish, "common_population.csv", row.names = F)
+
+
+# Stats 2b: Fisher test on "non-rare" clones ------------------------------
+# Take only those over count == 1, and reshape to suit test
+common2 <- ddply(counts, .(date, mlg), function(x){
+  if(sum(x$count) > 1) 
+    x
+})
+
+common2 <- dcast(common2, date + mlg ~ type, value.var = "count")
+
+#Make holder & do the test
+dates2b <- unique(common2$date)
+common.fish2 <- data.frame(date = dates2b, p_value = 0)
+for(i in 1:length(dates2b)){
+  tmp <- common2[common2$date == dates2b[i], 3:4] 
+  tmp <- tmp[tmp$Infected != 0 | tmp$Random !=0, ]
+  fish <- fisher.test(as.matrix(tmp), workspace = 1e+09)
+  common.fish2[i, "p_value"] <- fish$p.value
+}
+
+#Apply Bonferroni correction
+common.fish2$p_value <- common.fish2$p_value * nrow(common.fish2)
+
+#write to file
+write.table(common.fish2, "non_rare_population.csv", row.names = F)
+
+
 
 # Stats 3: Individual clone over / under infection ------------------------
 
