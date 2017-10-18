@@ -4,7 +4,9 @@ library(ggplot2)
 library(ggExtra)
 library(reshape2)
 
-#Load and clean data
+# Load, clean, and prepare data -------------------------------------------
+
+# Load and clean data
 mlgs <- read.table(file = "inputs/confirmed_mlgs.txt", header = TRUE, sep = "\t")
 mlgs <- mlgs[, c("mlg", "pop", "X2")]
 names(mlgs) <- c("mlg", "date", "type")
@@ -31,20 +33,7 @@ counts <- ddply(counts, .(date, type), function(x){
   x
 })
 
-#Do a Fisher's exact test to check whether infected and random samples differ at each date
-dates <- unique(counts$date)
-pop.fish <- data.frame(date = dates, p_value = 0)
-
-for(i in 1:length(dates)){
-  tmp <- counts[counts$date == dates[i], 1:4] 
-  tmp <- dcast(tmp, mlg ~ type)
-  tmp <- tmp[tmp$Infected != 0 | tmp$Random !=0, ]
-  fish <- fisher.test(as.matrix(tmp[, 2:3]), workspace = 1e+09)
-  pop.fish[i, "p_value"] <- fish$p.value
-}
-
-####Make a graph showing how sample types differ at each date
-# First, rename the mlgs so that each date has it's own set
+# Rename the mlgs so that each date has it's own set
 # For the percent data
 percent_by_date <- ddply(counts, .(date), function(x){
   tmp <- dcast(x, mlg ~ type, value.var = "percent")
@@ -76,7 +65,12 @@ names(counts_by_date)[4:5] <- c("type", "count")
 counts_by_date$type <- factor(counts_by_date$type, levels = c("Random", "Infected"))
 counts_by_date[counts_by_date == 0] <- NA
 
-#Second, create the graph (for counts)
+
+
+# Create Graphs -----------------------------------------------------------
+
+
+#Create the graph (for counts)
 pop.graph <- ggplot(counts_by_date, 
                     aes(x = mlg2, y = count)) +
   facet_grid(date~type, scales = "free") +
@@ -113,3 +107,86 @@ pop.graph2
 
 ggsave("Rand_vs_Inf_percent.pdf", pop.graph2, height = 10, width = 4, units = "in", dpi = 600)
 
+
+
+# Stats 1: Fisher test on whole pop ------------------------------------------------------------
+
+#Do a Fisher's exact test to check whether infected and random samples differ at each date
+dates <- unique(counts$date)
+pop.fish <- data.frame(date = dates, p_value = 0)
+
+for(i in 1:length(dates)){
+  tmp <- counts[counts$date == dates[i], 1:4] 
+  tmp <- dcast(tmp, mlg ~ type)
+  tmp <- tmp[tmp$Infected != 0 | tmp$Random !=0, ]
+  fish <- fisher.test(as.matrix(tmp[, 2:3]), workspace = 1e+09)
+  pop.fish[i, "p_value"] <- fish$p.value
+}
+# Apply bonferroni correction
+
+pop.fish$p_value <- pop.fish$p_value * nrow(pop.fish)
+
+#write to file
+write.table(pop.fish, "whole_population.csv", row.names = F)
+
+# Stats 2: Fisher test on common clones -----------------------------------
+# Take only those over 5%, and reshape to suit test
+common <- ddply(counts, .(date, mlg), function(x){
+  if(sum(x$count) > 1) 
+    x
+})
+
+common <- dcast(common, date + mlg ~ type, value.var = "count")
+
+#Make holder & do the test
+dates2 <- unique(common$date)
+common.fish <- data.frame(date = dates2, p_value = 0)
+for(i in 1:length(dates2)){
+  tmp <- common[common$date == dates2[i], 3:4] 
+  tmp <- tmp[tmp$Infected != 0 | tmp$Random !=0, ]
+  fish <- fisher.test(as.matrix(tmp), workspace = 1e+09)
+  common.fish[i, "p_value"] <- fish$p.value
+}
+
+#Apply Bonferroni correction
+common.fish$p_value <- common.fish$p_value * nrow(common.fish)
+
+#write to file
+write.table(common.fish, "common_population.csv", row.names = F)
+
+# Stats 3: Individual clone over / under infection ------------------------
+
+# For individual clones, choose only those over 6 in either sample
+mis_inf <- ddply(counts, .(date, mlg), function(x){
+  if(sum(x$count) >= 6) 
+    x
+})
+
+#Cast them into a useful shape
+mis_inf <- dcast(mis_inf, date + mlg ~ type, value.var = "count")
+
+# Do the binomial test
+mis_inf$binom <- 0
+for(i in 1:nrow(mis_inf)){
+  test <- "two.sided"
+  if(mis_inf[i, "Infected"] < mis_inf[i, "Random"])
+    test <- "less"
+  if(mis_inf[i, "Infected"] > mis_inf[i, "Random"])
+    test <- "greater"
+  mis_inf[i, "binom"] <- a <- binom.test(as.numeric(mis_inf[i, 3:4]), alternative = test)$p.value
+
+}
+
+#Apply bonferroni correction
+mis_inf$binom <- mis_inf$binom * nrow(mis_inf)
+
+#filter by significance
+mis_inf <- mis_inf[mis_inf$binom <= 0.05, ]
+
+#write to file
+write.table(mis_inf, "over_infection.csv", row.names = F)
+
+
+
+# Redo graph in light of stats --------------------------------------------
+# Add stats info to graph input tables
