@@ -1,4 +1,4 @@
-
+setwd("/media/FILES/Dropbox/Turko PhD Data/Turko et al Chapter 5 Greifensee/Time Series")
 library(plyr)
 library(ggplot2)
 library(ggExtra)
@@ -67,6 +67,9 @@ counts_by_date[counts_by_date == 0] <- NA
 
 
 
+
+
+
 # Create Graphs -----------------------------------------------------------
 
 
@@ -101,11 +104,11 @@ pop.graph2 <- ggplot(percent_by_date,
   ylab(label = "Percent of Sample") +
   xlab(label = "MLG") +
   theme(aspect.ratio = 1) +
-  coord_flip() +
-  geom_hline(yintercept = 5, size = 0.1)
+  coord_flip() 
 pop.graph2
 
-ggsave("Rand_vs_Inf_percent.pdf", pop.graph2, height = 10, width = 4, units = "in", dpi = 600)
+# ggsave("Rand_vs_Inf_percent.pdf", pop.graph2, height = 10, width = 4, units = "in", dpi = 600)
+
 
 
 
@@ -122,99 +125,149 @@ for(i in 1:length(dates)){
   fish <- fisher.test(as.matrix(tmp[, 2:3]), workspace = 1e+09)
   pop.fish[i, "p_value"] <- fish$p.value
 }
-# Apply bonferroni correction
+# Apply Holm-bonferroni correction
 
-pop.fish$p_value <- pop.fish$p_value * nrow(pop.fish)
+pop.fish <- pop.fish[order(pop.fish$p_value), ]
+pop.fish$threshhold <- 0.05 / (nrow(pop.fish) - 1:nrow(pop.fish) + 1)
+pop.fish$sig <- "no"
+pop.fish$sig[pop.fish$p_value <= pop.fish$threshhold] <- "yes"
 
 #write to file
 write.table(pop.fish, "whole_population.csv", row.names = F)
 
-# Stats 2: Fisher test on common clones -----------------------------------
+
+
+
+# Stats 2: Fisher test on common clones (top5 %)-----------------------------------
+
 # Take only those over 5%, and reshape to suit test
 common <- ddply(counts, .(date, mlg), function(x){
-  if(sum(x$percent) >= 0.05) 
-    x
+  if(max(x$percent) >= 0.05) 
+    x$common <- "yes"
+  else
+    x$common <- "no"
+  x
 })
-
-common <- dcast(common, date + mlg ~ type, value.var = "count")
 
 #Make holder & do the test
-dates2 <- unique(common$date)
-common.fish <- data.frame(date = dates2, p_value = 0)
-for(i in 1:length(dates2)){
-  tmp <- common[common$date == dates2[i], 3:4] 
-  tmp <- tmp[tmp$Infected != 0 | tmp$Random !=0, ]
-  fish <- fisher.test(as.matrix(tmp), workspace = 1e+09)
-  common.fish[i, "p_value"] <- fish$p.value
-}
+dates2 <- unique(common[common$common == "yes", c("date", "mlg")])
+dates2$p_value = 1
 
-#Apply Bonferroni correction
-common.fish$p_value <- common.fish$p_value * nrow(common.fish)
+for(i in 1:nrow(dates2)){
+  date <- dates2$date[i]
+  mlg <- dates2$mlg[i]
+  com <- common[common$date == date & common$mlg == mlg, ]
+  com_rand <- com$count[com$type == "Random"]
+  com_inf <- com$count[com$type == "Infected"]
+  other <- common[common$date == date & common$mlg != mlg, ]
+  other_rand <- sum(other$count[other$type == "Random"])
+  other_inf <- sum(other$count[other$type == "Infected"])
+  to_test <- data.frame(random = c(com_rand, other_rand),
+                        infected = c(com_inf, other_inf))
+  tmp_p <- fisher.test(to_test)$p.value
+  dates2[i, "p_value"] <- tmp_p
+  }
+
+# Apply Holm-bonferroni correction
+
+dates2 <- dates2[order(dates2$p_value), ]
+dates2$threshhold <- 0.05 / (nrow(dates2) - 1:nrow(dates2) + 1)
+dates2$sig <- "no"
+dates2$sig[dates2$p_value <= dates2$threshhold] <- "yes"
 
 #write to file
-write.table(common.fish, "common_population.csv", row.names = F)
+write.table(dates2, "over_under_inf.csv", row.names = F)
 
 
-# Stats 2b: Fisher test on "non-rare" clones ------------------------------
-# Take only those over count == 1, and reshape to suit test
-common2 <- ddply(counts, .(date, mlg), function(x){
-  if(sum(x$count) > 1) 
-    x
+
+
+# Stats 2.5 Fisher test on two most common clones -----------------------------------
+#Rank all the mlgs in each sample type . 
+counts2 <- ddply(counts, .(date, type), function(x){
+  x <- x[order(x$count, decreasing = TRUE), ]
+  x$rank <- 0
+  for(i in 1:nrow(x)){
+    if(x$count[i] != 0 & i == 1)
+      x$rank[i] <- 1
+    if(i > 1){
+      if(x$count[i] != 0 & x$count[i] == x$count[i - 1])
+        x$rank[i] <- x$rank[i - 1] 
+      if(x$count[i] != 0 & x$count[i] < x$count[i - 1])
+        x$rank[i] <- x$rank[i - 1] + 1
+    }
+  }
+  x
 })
 
-common2 <- dcast(common2, date + mlg ~ type, value.var = "count")
+
+# Take only the top clones in each sample type, and reshape to suit test
+common2 <- ddply(counts2, .(date, mlg), function(x){
+  if(sum(x$rank %in% c(1,2)) == 1)  
+  #if(x$rank[2] %in% c(1,2))
+    x$common <- "yes"
+  else
+    x$common <- "no"
+  x
+})
 
 #Make holder & do the test
-dates2b <- unique(common2$date)
-common.fish2 <- data.frame(date = dates2b, p_value = 0)
-for(i in 1:length(dates2b)){
-  tmp <- common2[common2$date == dates2b[i], 3:4] 
-  tmp <- tmp[tmp$Infected != 0 | tmp$Random !=0, ]
-  fish <- fisher.test(as.matrix(tmp), workspace = 1e+09)
-  common.fish2[i, "p_value"] <- fish$p.value
+dates3 <- unique(common2[common2$common == "yes", c("date", "mlg")])
+dates3$p_value = 1
+
+for(i in 1:nrow(dates3)){
+  date <- dates3$date[i]
+  mlg <- dates3$mlg[i]
+  com <- common2[common2$date == date & common2$mlg == mlg, ]
+  com_rand <- com$count[com$type == "Random"]
+  com_inf <- com$count[com$type == "Infected"]
+  other <- common2[common2$date == date & common2$mlg != mlg, ]
+  other_rand <- sum(other$count[other$type == "Random"])
+  other_inf <- sum(other$count[other$type == "Infected"])
+  to_test <- data.frame(random = c(com_rand, other_rand),
+                        infected = c(com_inf, other_inf))
+  tmp_p <- fisher.test(to_test)$p.value
+  dates3[i, "p_value"] <- tmp_p
 }
 
-#Apply Bonferroni correction
-common.fish2$p_value <- common.fish2$p_value * nrow(common.fish2)
+# Apply Holm-bonferroni correction
+
+dates3 <- dates3[order(dates3$p_value), ]
+dates3$threshhold <- 0.05 / (nrow(dates3) - 1:nrow(dates3) + 1)
+dates3$sig <- "no"
+dates3$sig[dates3$p_value <= dates3$threshhold] <- "yes"
 
 #write to file
-write.table(common.fish2, "non_rare_population.csv", row.names = F)
-
-
-
-# Stats 3: Individual clone over / under infection ------------------------
-
-# For individual clones, choose only those over 6 in either sample
-mis_inf <- ddply(counts, .(date, mlg), function(x){
-  if(sum(x$count) >= 6) 
-    x
-})
-
-#Cast them into a useful shape
-mis_inf <- dcast(mis_inf, date + mlg ~ type, value.var = "count")
-
-# Do the binomial test
-mis_inf$binom <- 0
-for(i in 1:nrow(mis_inf)){
-  test <- "two.sided"
-  if(mis_inf[i, "Infected"] < mis_inf[i, "Random"])
-    test <- "less"
-  if(mis_inf[i, "Infected"] > mis_inf[i, "Random"])
-    test <- "greater"
-  mis_inf[i, "binom"] <- a <- binom.test(as.numeric(mis_inf[i, 3:4]), alternative = test)$p.value
-
-}
-
-#Apply bonferroni correction
-mis_inf$binom <- mis_inf$binom * nrow(mis_inf)
-
-#filter by significance
-mis_inf <- mis_inf[mis_inf$binom <= 0.05, ]
-
-#write to file
-write.table(mis_inf, "over_infection.csv", row.names = F)
+write.table(dates3, "over_under_inf_top_two.csv", row.names = F)
 
 
 
 # Redo graph in light of stats --------------------------------------------
-# Add stats info to graph input tables
+# Make list of mis-infected clones
+sigs <- dates3[dates3$sig == "yes", ]
+mis_inf_clones <- paste(sigs$date, sigs$mlg, sep = "_")
+
+#Filter percent data to just these clones
+percent_by_date2 <- percent_by_date[percent_by_date$mlg2 %in% mis_inf_clones, ]
+
+
+#Mark over vs under-infection
+percent_by_date2$Infection <- NA
+percent_by_date2 <- ddply(percent_by_date2, .(mlg2), function(x){
+  x[is.na(x)] <- 0
+  if(x[x$type == "Infected", "percent"] < x[x$type == "Random", "percent"])
+    x$Infection <- "Under"
+  if(x[x$type == "Infected", "percent"] > x[x$type == "Random", "percent"])
+    x$Infection <- "Over"
+  x
+})
+
+#Add red bars to original ggplot
+
+pop.graph2.red <- pop.graph2 +
+  geom_bar(data = percent_by_date2, aes(x = mlg2, y = percent * 100, fill = Infection), 
+           stat = "identity", width = 0.8)
+pop.graph2.red  
+
+#save it
+ggsave("Rand_vs_Inf_percent_red.pdf", pop.graph2.red, height = 10, width = 6, units = "in", dpi = 600)
+
