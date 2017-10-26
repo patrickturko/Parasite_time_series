@@ -77,7 +77,7 @@ counts_by_date[counts_by_date == 0] <- NA
 pop.graph <- ggplot(counts_by_date, 
                     aes(x = mlg2, y = count)) +
   facet_grid(date~type, scales = "free") +
-  geom_bar(stat = "identity", width = 0.8) +
+  geom_bar(stat = "identity", width = 0.8, color = "lightgrey") +
   theme_bw() +
   removeGrid() +
   scale_x_discrete(expand = c(0.02, 0.02)) +
@@ -95,7 +95,7 @@ pop.graph
 pop.graph2 <- ggplot(percent_by_date, 
                     aes(x = mlg2, y = percent * 100)) +
   facet_grid(date~type, scales = "free_y") +
-  geom_bar(stat = "identity", width = 0.8) +
+  geom_bar(stat = "identity", width = 0.8, fill = "lightgrey") +
   theme_bw() +
   removeGrid() +
   scale_x_discrete(expand = c(0.02, 0.02)) +
@@ -108,6 +108,7 @@ pop.graph2 <- ggplot(percent_by_date,
 pop.graph2
 
 # ggsave("Rand_vs_Inf_percent.pdf", pop.graph2, height = 10, width = 4, units = "in", dpi = 600)
+
 
 
 
@@ -200,10 +201,9 @@ counts2 <- ddply(counts, .(date, type), function(x){
 })
 
 
-# Take only the top clones in each sample type, and reshape to suit test
+# Take only the top clones in random (which are also over 5%), and reshape to suit test
 common2 <- ddply(counts2, .(date, mlg), function(x){
-  if(sum(x$rank %in% c(1,2)) == 1)  
-  #if(x$rank[2] %in% c(1,2))
+  if(x$rank[2] %in% c(1,2) & x$percent[2] > 0.052)
     x$common <- "yes"
   else
     x$common <- "no"
@@ -241,18 +241,22 @@ write.table(dates3, "over_under_inf_top_two.csv", row.names = F)
 
 
 
-# Redo graph in light of stats --------------------------------------------
-# Make list of mis-infected clones
-sigs <- dates3[dates3$sig == "yes", ]
-mis_inf_clones <- paste(sigs$date, sigs$mlg, sep = "_")
 
-#Filter percent data to just these clones
+# Redo graph in light of stats --------------------------------------------
+# Make list of clones tested for mis-infection
+mis_inf_clones <- paste(dates3$date, dates3$mlg, sep = "_")
+
+#Filter percent data to just these clones 
 percent_by_date2 <- percent_by_date[percent_by_date$mlg2 %in% mis_inf_clones, ]
 
+#Add info on significance
+percent_by_date2$mlg2 <- paste(percent_by_date2$date, percent_by_date2$mlg, sep = "_")
+dates3$mlg2 <- mis_inf_clones
+percent_by_date2 <- merge(percent_by_date2, dates3)
 
 #Mark over vs under-infection
-percent_by_date2$Infection <- NA
 percent_by_date2 <- ddply(percent_by_date2, .(mlg2), function(x){
+  
   x[is.na(x)] <- 0
   if(x[x$type == "Infected", "percent"] < x[x$type == "Random", "percent"])
     x$Infection <- "Under"
@@ -261,13 +265,40 @@ percent_by_date2 <- ddply(percent_by_date2, .(mlg2), function(x){
   x
 })
 
-#Add red bars to original ggplot
+#Mark non-signifcant differences 
+percent_by_date2[percent_by_date2$sig == "no", "Infection"] <- "Proportionate"
+
+#Add colored bars to original ggplot
 
 pop.graph2.red <- pop.graph2 +
-  geom_bar(data = percent_by_date2, aes(x = mlg2, y = percent * 100, fill = Infection), 
-           stat = "identity", width = 0.8)
+  geom_bar(data = percent_by_date2, aes(x = mlg2, y = percent * 100, 
+                                        fill = Infection), 
+           stat = "identity", width = 0.8) +
+  scale_fill_manual(values = c("red", "black", "blue"))
 pop.graph2.red  
 
+#Add p-values to colored plot
+#Crate the annotation data frame
+ps <- pop.fish
+ps$p_value[ps$p_value > 0.00001] <- round(ps$p_value[ps$p_value > 0.00001], 3)
+ps$p_value[ps$p_value < 0.00001] <- "< 0.00001"
+ps$type <- factor("Infected", levels = c("Random", "Infected"))
+ps$face <- "plain"
+ps$face[ps$sig == "yes"] <- "bold"
+
+#Calculate the label positions 
+for(i in 1:nrow(ps)){
+  ps$pos[i] <- nrow(percent_by_date[percent_by_date$date == ps[i, "date"], ]) * 0.4
+}
+
+#add the annotations to the graph
+final.graph <- pop.graph2.red +
+  geom_text(data = ps, aes(label = p_value, x = pos, fontface = face), 
+            y = 45, hjust = "inward", vjust = "inward", 
+            size = 3) +
+  theme(legend.position="none")
+final.graph
+
 #save it
-ggsave("Rand_vs_Inf_percent_red.pdf", pop.graph2.red, height = 10, width = 6, units = "in", dpi = 600)
+ggsave("Rand_vs_Inf_percent_annotated.pdf", final.graph, height = 10, width = 6, units = "in", dpi = 600)
 
