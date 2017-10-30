@@ -139,6 +139,7 @@ write.table(pop.fish, "whole_population.csv", row.names = F)
 
 
 
+
 # Stats 2: Fisher test on common clones (top5 %)-----------------------------------
 
 # Take only those over 5%, and reshape to suit test
@@ -203,7 +204,7 @@ counts2 <- ddply(counts, .(date, type), function(x){
 
 # Take only the top clones in random (which are also over 5%), and reshape to suit test
 common2 <- ddply(counts2, .(date, mlg), function(x){
-  if(x$rank[2] %in% c(1,2) & x$percent[2] > 0.052)
+  if(x$rank[2] %in% c(1,2) & x$percent[2] > 0.05)
     x$common <- "yes"
   else
     x$common <- "no"
@@ -239,7 +240,11 @@ dates3$sig[dates3$p_value <= dates3$threshhold] <- "yes"
 #write to file
 write.table(dates3, "over_under_inf_top_two.csv", row.names = F)
 
+#Subset common clones to report to Justyna
 
+common3 <- common2[common2$type == "Random" & common2$common == "yes", ]
+common3 <- common3[with(common3, order(date, rank)), ]
+#write.table(common3, "list_of_common_clones.csv", quote = F, row.names = F)
 
 
 # Redo graph in light of stats --------------------------------------------
