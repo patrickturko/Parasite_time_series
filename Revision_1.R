@@ -1,4 +1,6 @@
 setwd("/media/FILES/Dropbox/Turko PhD Data/Turko et al Chapter 5 Greifensee/Time Series")
+setwd("E:/Dropbox/Turko PhD Data/Turko et al Chapter 5 Greifensee/Time Series")
+
 library(plyr)
 library(ggplot2)
 library(ggExtra)
@@ -26,6 +28,11 @@ counts <- dcast(matched, date + type ~ mlg, fun.aggregate = length)
 counts <- melt(counts, id.vars = c("date", "type"))
 names(counts) <- c("date", "type", "mlg", "count")
 
+#Prepare a sample size table for the paper
+ss <- ddply(counts, .(date, type), function(x) sum(x$count))
+ss <- dcast(ss, date ~ type)  
+
+  
 #Express counts as percentages instead.
 counts <- ddply(counts, .(date, type), function(x){
   total <- sum(x$count)
@@ -204,12 +211,15 @@ counts2 <- ddply(counts, .(date, type), function(x){
 
 # Take only the top clones in random (which are also over 5%), and reshape to suit test
 common2 <- ddply(counts2, .(date, mlg), function(x){
-  if(x$rank[2] %in% c(1,2) & x$percent[2] > 0.05)
+  if(x$rank[2] %in% c(1,2) & x$percent[2] > 0.052)
     x$common <- "yes"
   else
     x$common <- "no"
   x
 })
+
+
+
 
 #Make holder & do the test
 dates3 <- unique(common2[common2$common == "yes", c("date", "mlg")])
@@ -230,6 +240,9 @@ for(i in 1:nrow(dates3)){
   dates3[i, "p_value"] <- tmp_p
 }
 
+# Git rid of second-class clone where there are two first-rank clones
+dates3 <- dates3[dates3$mlg != 32, ]
+
 # Apply Holm-bonferroni correction
 
 dates3 <- dates3[order(dates3$p_value), ]
@@ -238,13 +251,26 @@ dates3$sig <- "no"
 dates3$sig[dates3$p_value <= dates3$threshhold] <- "yes"
 
 #write to file
-write.table(dates3, "over_under_inf_top_two.csv", row.names = F)
+#write.table(dates3, "over_under_inf_top_two.csv", row.names = F)
 
 #Subset common clones to report to Justyna
 
 common3 <- common2[common2$type == "Random" & common2$common == "yes", ]
 common3 <- common3[with(common3, order(date, rank)), ]
 #write.table(common3, "list_of_common_clones.csv", quote = F, row.names = F)
+ 
+# calculate the probability that this many significant results could 
+# be found by chance alone Moran 2003 "Arguments for rejecting the sequential
+# Bonferroni in ecological studies"
+
+alpha <- 0.05
+N <- nrow(dates3)
+K <- nrow(dates3[dates3$p_value < alpha, ])
+NmK <- N - K
+
+first_term <- factorial(N) / (factorial(NmK) * factorial(K))
+second_term <- alpha^K * (1 - alpha)^NmK
+probability <- first_term * second_term
 
 
 # Redo graph in light of stats --------------------------------------------
@@ -271,7 +297,7 @@ percent_by_date2 <- ddply(percent_by_date2, .(mlg2), function(x){
 })
 
 #Mark non-signifcant differences 
-percent_by_date2[percent_by_date2$sig == "no", "Infection"] <- "Proportionate"
+percent_by_date2[percent_by_date2$p_value > 0.05, "Infection"] <- "Proportionate"
 
 #Add colored bars to original ggplot
 
@@ -289,7 +315,7 @@ ps$p_value[ps$p_value > 0.00001] <- round(ps$p_value[ps$p_value > 0.00001], 3)
 ps$p_value[ps$p_value < 0.00001] <- "< 0.00001"
 ps$type <- factor("Infected", levels = c("Random", "Infected"))
 ps$face <- "plain"
-ps$face[ps$sig == "yes"] <- "bold"
+ps$face[ps$sig == "yes"] <- "italic"
 
 #Calculate the label positions 
 for(i in 1:nrow(ps)){
@@ -305,5 +331,5 @@ final.graph <- pop.graph2.red +
 final.graph
 
 #save it
-ggsave("Rand_vs_Inf_percent_annotated.pdf", final.graph, height = 10, width = 6, units = "in", dpi = 600)
+ggsave("Rand_vs_Inf_percent_annotated3.pdf", final.graph, height = 10, width = 6, units = "in", dpi = 600)
 
