@@ -273,6 +273,7 @@ second_term <- alpha^K * (1 - alpha)^NmK
 probability <- first_term * second_term
 
 
+
 # Redo graph in light of stats --------------------------------------------
 # Make list of clones tested for mis-infection
 mis_inf_clones <- paste(dates3$date, dates3$mlg, sep = "_")
